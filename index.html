@@ -7,7 +7,7 @@
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
     <style>
         body { font-family: Arial, sans-serif; max-width: 800px; margin: 40px auto; padding: 20px; line-height: 1.6; }
-        textarea { width: 100%; height: 150px; margin-bottom: 20px;padding: 10px; font-family: monospace; }
+        textarea { width: 100%; height: 150px; margin-bottom: 20px; padding: 10px; font-family: monospace; box-sizing: border-box; }
         input[type="text"] { width: 100%; padding: 10px; margin-bottom: 20px; font-size: 16px; box-sizing: border-box; }
         button { background: #007BFF; color: white; padding: 10px 20px; border: none; cursor: pointer; font-size: 16px; border-radius: 5px; }
         button:hover { background: #0056b3; }
@@ -22,11 +22,11 @@
     <p>Upload your template, list your new cities, and download them all in a ZIP file instantly.</p>
 
     <div class="note">
-        <strong>Custom Injection Container:</strong> You can now explicitly map out the exact CSS selector class or ID where the generator will insert your dynamic list of link entities.
+        <strong>Custom Injection Container:</strong> You can explicitly map out the exact CSS selector class or ID where the dynamic list of link entities will be inserted.
     </div>
 
     <h3>1. Paste HTML Template</h3>
-    <textarea id="template" placeholder="<!DOCTYPE html>&#10;<html>&#10;<head><title>Best Products in New York</title></head>&#10;<body>&#10;  <h1>Welcome to New York</h1>&#10;  &#10;  <div class=&quot;my-custom-footer&quot;></div>&#10;</body>&#10;</html>"></textarea>
+    <textarea id="template" placeholder="<!DOCTYPE html>&#10;<html>&#10;<head><title>Best Products in New York</title></head>&#10;<body>&#10;  <h1>Welcome to New York</h1>&#10;  <p>Find top-rated services across New York today.</p>&#10;  <div class=&quot;city_sec&quot;></div>&#10;</body>&#10;</html>"></textarea>
 
     <div class="flex-container">
         <div class="flex-child">
@@ -90,34 +90,31 @@
             cityDataList.forEach((currentCity) => {
                 let pageContent = templateInput;
 
-                // City Name / Placeholder Replacements
-                if (oldCity) {
-                    const escapedOldCity = oldCity.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-                    const titleRegex = new RegExp(`(<title>[^<]*)${escapedOldCity}([^<]*<\/title>)`, 'gi');
-                    pageContent = pageContent.replace(titleRegex, `$1${currentCity.name}$2`);
-
-                    const headingRegex = new RegExp(`(<h[1-6][^>]*>[^<]*)${escapedOldCity}([^<]*<\/h[1-6]>)`, 'gi');
-                    pageContent = pageContent.replace(headingRegex, `$1${currentCity.name}$2`);
-                }
+                // 1. Replace placeholder token {{CITY}}
                 pageContent = pageContent.replace(/{{CITY}}/g, currentCity.name);
 
-                // Build HTML Links
+                // 2. Global Word-Boundary Replacement for oldCity across all body content, tags, & metadata
+                if (oldCity) {
+                    const escapedOldCity = oldCity.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+                    const globalCityRegex = new RegExp(`\\b${escapedOldCity}\\b`, 'gi');
+                    pageContent = pageContent.replace(globalCityRegex, currentCity.name);
+                }
+
+                // 3. Build HTML Links
                 const linksArray = cityDataList.map(item => {
                     return `<a href="${item.filename}">${item.name}</a>`;
                 });
                 const generatedLinksHtml = linksArray.join(divider);
 
-                // Build Dynamic Safe Regex targeting Class or ID based on user preference
+                // 4. Inject links into target container
                 if (targetSelector) {
-                    const cleanSelector = targetSelector.replace(/^[.#]/, ''); // Strip out . or # character for parsing
+                    const cleanSelector = targetSelector.replace(/^[.#]/, '');
                     let customRegex;
 
                     if (targetSelector.startsWith('#')) {
-                        // Target ID: e.g. id="footer-links" or id='footer-links'
-                        customRegex = new RegExp(`(<[^>]*id=["'][^"']*${cleanSelector}[^"']*["'][^>]*>)([\\s\\S]*?)(<\\/div>)`, 'gi');
+                        customRegex = new RegExp(`(<[^>]*id=["'][^"']*${cleanSelector}[^"']*["'][^>]*>)([\\s\\S]*?)(<\\/[a-z0-9]+>)`, 'gi');
                     } else {
-                        // Target Class (Default): e.g. class="city_sec" or class='city_sec'
-                        customRegex = new RegExp(`(<[^>]*class=["'][^"']*${cleanSelector}[^"']*["'][^>]*>)([\\s\\S]*?)(<\\/div>)`, 'gi');
+                        customRegex = new RegExp(`(<[^>]*class=["'][^"']*${cleanSelector}[^"']*["'][^>]*>)([\\s\\S]*?)(<\\/[a-z0-9]+>)`, 'gi');
                     }
 
                     if (customRegex.test(pageContent)) {
