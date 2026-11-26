@@ -1,0 +1,143 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Bulk City Page Generator</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+    <style>
+        body { font-family: Arial, sans-serif; max-width: 800px; margin: 40px auto; padding: 20px; line-height: 1.6; }
+        textarea { width: 100%; height: 150px; margin-bottom: 20px;padding: 10px; font-family: monospace; }
+        input[type="text"] { width: 100%; padding: 10px; margin-bottom: 20px; font-size: 16px; box-sizing: border-box; }
+        button { background: #007BFF; color: white; padding: 10px 20px; border: none; cursor: pointer; font-size: 16px; border-radius: 5px; }
+        button:hover { background: #0056b3; }
+        .note { background: #e9ecef; padding: 10px; border-left: 4px solid #007BFF; margin-bottom: 20px; }
+        .flex-container { display: flex; gap: 20px; }
+        .flex-child { flex: 1; }
+    </style>
+</head>
+<body>
+
+    <h2>🏙️ Citywise Bulk Page Generator</h2>
+    <p>Upload your template, list your new cities, and download them all in a ZIP file instantly.</p>
+
+    <div class="note">
+        <strong>Custom Injection Container:</strong> You can now explicitly map out the exact CSS selector class or ID where the generator will insert your dynamic list of link entities.
+    </div>
+
+    <h3>1. Paste HTML Template</h3>
+    <textarea id="template" placeholder="<!DOCTYPE html>&#10;<html>&#10;<head><title>Best Products in New York</title></head>&#10;<body>&#10;  <h1>Welcome to New York</h1>&#10;  &#10;  <div class=&quot;my-custom-footer&quot;></div>&#10;</body>&#10;</html>"></textarea>
+
+    <div class="flex-container">
+        <div class="flex-child">
+            <h3>2. City to Replace (Optional)</h3>
+            <input type="text" id="oldCity" placeholder="e.g., New York (Leave blank if using {{CITY}})">
+        </div>
+        <div class="flex-child">
+            <h3>3. Filename Prefix (Optional)</h3>
+            <input type="text" id="filePrefix" placeholder="e.g., pest-control-services-in-">
+        </div>
+    </div>
+
+    <div class="flex-container">
+        <div class="flex-child">
+            <h3>4. Link Injection Selector (Class or ID)</h3>
+            <input type="text" id="targetSelector" value=".city_sec" placeholder="e.g., .city_sec or #footer-links">
+        </div>
+        <div class="flex-child">
+            <h3>5. Links Divider</h3>
+            <input type="text" id="divider" value=" | " placeholder="e.g., | or • or , ">
+        </div>
+    </div>
+
+    <h3>6. Enter New City Names (One per line)</h3>
+    <textarea id="cities" placeholder="Los Angeles&#10;Chicago&#10;Houston"></textarea>
+
+    <button onclick="generatePages()">Generate & Download ZIP</button>
+
+    <script>
+        function generatePages() {
+            const templateInput = document.getElementById('template').value; 
+            const citiesInput = document.getElementById('cities').value.trim();
+            const oldCity = document.getElementById('oldCity').value.trim();
+            let filePrefix = document.getElementById('filePrefix').value.trim();
+            const targetSelector = document.getElementById('targetSelector').value.trim();
+            const divider = document.getElementById('divider').value;
+
+            if (!templateInput.trim() || !citiesInput) {
+                alert("Please fill in both the HTML template and the city list!");
+                return;
+            }
+
+            if (filePrefix && !filePrefix.endsWith('-') && !filePrefix.endsWith('_')) {
+                filePrefix += '-'; 
+            }
+
+            const cities = citiesInput.split('\n').map(c => c.trim()).filter(c => c.length > 0);
+            const zip = new JSZip();
+
+            // --- Phase 1: Map filenames and data ---
+            const cityDataList = cities.map(city => {
+                let citySlug = city.toLowerCase()
+                                   .replace(/[^a-z0-9\s-]/g, '') 
+                                   .replace(/\s+/g, '-');        
+                
+                let filename = filePrefix ? `${filePrefix}${citySlug}.html` : `${citySlug}.html`;
+                return { name: city, filename: filename };
+            });
+
+            // --- Phase 2: Process pages ---
+            cityDataList.forEach((currentCity) => {
+                let pageContent = templateInput;
+
+                // City Name / Placeholder Replacements
+                if (oldCity) {
+                    const escapedOldCity = oldCity.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+                    const titleRegex = new RegExp(`(<title>[^<]*)${escapedOldCity}([^<]*<\/title>)`, 'gi');
+                    pageContent = pageContent.replace(titleRegex, `$1${currentCity.name}$2`);
+
+                    const headingRegex = new RegExp(`(<h[1-6][^>]*>[^<]*)${escapedOldCity}([^<]*<\/h[1-6]>)`, 'gi');
+                    pageContent = pageContent.replace(headingRegex, `$1${currentCity.name}$2`);
+                }
+                pageContent = pageContent.replace(/{{CITY}}/g, currentCity.name);
+
+                // Build HTML Links
+                const linksArray = cityDataList.map(item => {
+                    return `<a href="${item.filename}">${item.name}</a>`;
+                });
+                const generatedLinksHtml = linksArray.join(divider);
+
+                // Build Dynamic Safe Regex targeting Class or ID based on user preference
+                if (targetSelector) {
+                    const cleanSelector = targetSelector.replace(/^[.#]/, ''); // Strip out . or # character for parsing
+                    let customRegex;
+
+                    if (targetSelector.startsWith('#')) {
+                        // Target ID: e.g. id="footer-links" or id='footer-links'
+                        customRegex = new RegExp(`(<[^>]*id=["'][^"']*${cleanSelector}[^"']*["'][^>]*>)([\\s\\S]*?)(<\\/div>)`, 'gi');
+                    } else {
+                        // Target Class (Default): e.g. class="city_sec" or class='city_sec'
+                        customRegex = new RegExp(`(<[^>]*class=["'][^"']*${cleanSelector}[^"']*["'][^>]*>)([\\s\\S]*?)(<\\/div>)`, 'gi');
+                    }
+
+                    if (customRegex.test(pageContent)) {
+                        pageContent = pageContent.replace(customRegex, `$1${generatedLinksHtml}$3`);
+                    }
+                }
+
+                zip.file(currentCity.filename, pageContent);
+            });
+
+            // --- Phase 3: Export ZIP ---
+            zip.generateAsync({ type: "blob" }).then(function (content) {
+                const element = document.createElement('a');
+                element.href = URL.createObjectURL(content);
+                element.download = "city_pages.zip";
+                document.body.appendChild(element);
+                element.click();
+                document.body.removeChild(element);
+            });
+        }
+    </script>
+</body>
+</html>
